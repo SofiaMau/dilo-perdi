@@ -157,7 +157,7 @@ function deviceId(){
 function myPending(){ try{ return JSON.parse(localStorage.getItem("dp_pending")||"[]"); }catch(e){ return []; } }
 function savePending(list){ try{ localStorage.setItem("dp_pending",JSON.stringify(list)); }catch(e){} }
 
-function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display="none",3500); }
+function toast(msg,ms){ const t=document.getElementById("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display="none",ms||3500); }
 const inBounds=(lat,lon)=>lat>=BOUNDS.latMin&&lat<=BOUNDS.latMax&&lon>=BOUNDS.lonMin&&lon<=BOUNDS.lonMax;
 const ageDays=r=>Math.max(0,Math.floor((Date.now()-new Date(r.created_at))/DAY));
 const faded=r=>Date.now()-new Date(r.last_seen_at)>30*DAY;
@@ -293,18 +293,23 @@ document.getElementById("sendBtn").onclick=async()=>{
   const btn=document.getElementById("sendBtn"); btn.disabled=true; btn.textContent="Sending";
   try{
     const path=crypto.randomUUID()+".jpg";
-    const up=await sb.storage.from("photos").upload(path,draft.blob,{contentType:"image/jpeg",upsert:false});
-    if(up.error) throw up.error;
     const id=crypto.randomUUID();
     const note=document.getElementById("noteInput").value.trim().slice(0,140)||null;
-    const ins=await sb.from("reports").insert({id,lat:draft.lat,lon:draft.lon,sev:draft.sev,note,photo_path:path,device:deviceId()});
-    if(ins.error) throw ins.error;
+    const res=await sb.rpc("submit_report",{p_id:id,p_lat:draft.lat,p_lon:draft.lon,p_sev:draft.sev,p_note:note,p_photo_path:path,p_device:deviceId()});
+    if(res.error) throw res.error;
+    if(res.data==="duplicate"){
+      closeAll(); resetDraft(); load();
+      toast("This leak is already on the map. Thank you for keeping an eye on it!",6000);
+      return;
+    }
+    const up=await sb.storage.from("photos").upload(path,draft.blob,{contentType:"image/jpeg",upsert:false});
     savePending(myPending().concat([{id,lat:draft.lat,lon:draft.lon,t:Date.now()}]));
     closeAll(); resetDraft(); draw();
-    toast("Thank you! Your report will appear after a quick check.");
+    toast(up.error?"Your report is saved, but the photo did not upload. Thank you!":"Thank you! Your report will appear after a quick check.");
   }catch(e){
     const msg=(e&&e.message)||"";
-    toast(msg.includes("Too many")||msg.includes("too many") ? msg : "Sending failed. Check your connection and try again.");
+    const detail=[e&&e.code,msg,e&&e.details,e&&e.hint].filter(Boolean).join(" | ");
+    toast(msg.includes("Too many")||msg.includes("too many") ? msg : "Sending failed: "+(detail||String(e)),15000);
   }finally{ btn.textContent="Send"; refreshSend(); }
 };
 
