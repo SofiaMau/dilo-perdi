@@ -50,9 +50,11 @@ h1{font-family:var(--font-display);font-weight:800;font-size:1.45rem;margin:0}
 .btn:disabled{opacity:.45;cursor:default}
 .grow{flex:1}
 button:focus-visible,textarea:focus-visible,.photoPick:focus-within{outline:3px solid var(--accent);outline-offset:2px}
-.photoPick{position:relative;display:flex;align-items:center;justify-content:center;min-height:120px;border:2px dashed var(--line);border-radius:14px;color:var(--muted);font-weight:700;overflow:hidden;text-align:center;padding:8px}
+.photoPick{display:flex;align-items:center;justify-content:center;min-height:90px;border:2px dashed var(--line);border-radius:14px;color:var(--muted);font-weight:700;overflow:hidden;text-align:center;padding:8px}
 .photoPick img{max-width:100%;max-height:200px;display:block}
-.photoPick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.pickBtn{position:relative;overflow:hidden}
+.pickBtn input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.pickBtn:focus-within{outline:3px solid var(--accent);outline-offset:2px}
 .sev{flex:1;min-width:90px;padding:10px 8px;border-radius:12px;border:2px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
 .sev[aria-pressed="true"]{border-color:var(--accent);background:var(--surface)}
 .sev small{display:block;font-weight:400;color:var(--muted);font-size:.78rem}
@@ -91,10 +93,11 @@ textarea{width:100%;min-height:60px;border:1px solid var(--line);border-radius:1
       <h2>Report a leak</h2>
       <p class="sub">Photograph only the leak. Please keep people and car plates out of the photo.</p>
     </div>
-    <label class="photoPick" id="photoPick">
-      <span id="photoHint">Tap here to take a photo</span>
-      <input type="file" id="photoInput" accept="image/*" capture="environment">
-    </label>
+    <div class="photoPick" id="photoPick"><span id="photoHint">No photo yet</span></div>
+    <div class="row">
+      <label class="btn grow pickBtn">Take a photo<input type="file" class="photoInput" accept="image/*" capture="environment"></label>
+      <label class="btn grow pickBtn">Choose from gallery<input type="file" class="photoInput" accept="image/*"></label>
+    </div>
     <div class="loc" id="locBox">Your location will be found after you take the photo.</div>
     <div>
       <p class="sub" style="margin-bottom:6px">How strong is it?</p>
@@ -215,7 +218,7 @@ function setLoc(lat,lon,how){
   if(!pin){ pin=L.marker([draft.lat,draft.lon],{draggable:true}).addTo(map); pin.on("dragend",()=>{const p=pin.getLatLng(); setLoc(p.lat,p.lng,"moved");}); }
   else pin.setLatLng([draft.lat,draft.lon]);
   map.setView([draft.lat,draft.lon],Math.max(map.getZoom(),17));
-  locBox.textContent= how==="gps" ? "Location found. If the pin is not on the leak, drag it to the right spot." : "Spot marked. You can drag the pin to adjust it.";
+  locBox.textContent= how==="gps" ? "Location found where you are now. If the leak is somewhere else, drag the pin to it." : "Spot marked. You can drag the pin to adjust it.";
   tapMode=false; reportSheet.classList.remove("peek"); refreshSend();
 }
 function askTap(msg){ locBox.textContent=msg; tapMode=true; reportSheet.classList.add("peek"); }
@@ -232,9 +235,8 @@ function findLocation(){
 function resetDraft(){
   draft.blob=null; draft.lat=null; draft.lon=null; draft.sev="flow"; tapMode=false;
   if(pin){ map.removeLayer(pin); pin=null; }
-  const pick=document.getElementById("photoPick");
-  pick.innerHTML='<span id="photoHint">Tap here to take a photo</span><input type="file" id="photoInput" accept="image/*" capture="environment">';
-  bindPhoto();
+  document.getElementById("photoPick").innerHTML='<span id="photoHint">No photo yet</span>';
+  document.querySelectorAll(".photoInput").forEach(i=>i.value="");
   locBox.textContent="Your location will be found after you take the photo.";
   document.getElementById("noteInput").value="";
   document.querySelectorAll(".sev").forEach(b=>b.setAttribute("aria-pressed",b.dataset.sev==="flow"?"true":"false"));
@@ -255,17 +257,17 @@ function shrink(file,max,q){
   });
 }
 function bindPhoto(){
-  document.getElementById("photoInput").addEventListener("change",async e=>{
+  document.querySelectorAll(".photoInput").forEach(inp=>inp.addEventListener("change",async e=>{
     const f=e.target.files&&e.target.files[0]; if(!f) return;
     try{
       draft.blob=await shrink(f,1280,0.7);
       if(draft.blob.size>580000) draft.blob=await shrink(f,960,0.6);
       const img=new Image(); img.alt="Your photo of the leak"; img.src=URL.createObjectURL(draft.blob);
-      const hint=document.getElementById("photoHint"); if(hint) hint.replaceWith(img); else document.querySelector("#photoPick img").src=img.src;
+      document.getElementById("photoPick").replaceChildren(img);
       if(draft.lat==null) findLocation();
       refreshSend();
     }catch(err){ toast("That photo could not be read. Please try another one."); }
-  });
+  }));
 }
 bindPhoto();
 
