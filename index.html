@@ -65,6 +65,9 @@ textarea{width:100%;min-height:60px;border:1px solid var(--line);border-radius:1
 .meta{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.92rem;margin:0}
 .meta dt{color:var(--muted)} .meta dd{margin:0}
 .note{font-size:.85rem;color:var(--muted);margin:0}
+#pinBar{position:fixed;left:12px;right:12px;bottom:calc(16px + env(safe-area-inset-bottom));background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:0 6px 18px rgba(0,0,0,.25);display:none;gap:12px;align-items:center;justify-content:space-between;z-index:900;max-width:640px;margin:0 auto}
+#pinBar.show{display:flex}
+.locBtn{margin-top:8px;width:100%}
 #toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:.9rem;display:none;z-index:2000;max-width:90%}
 .leaflet-container{font-family:var(--font-body)}
 .aboutText p{margin:0 0 10px}
@@ -86,6 +89,7 @@ textarea{width:100%;min-height:60px;border:1px solid var(--line);border-radius:1
 
 <div id="map" role="region" aria-label="Map of reported leaks"></div>
 <button id="reportBtn">Report a leak</button>
+<div id="pinBar" role="status"><span id="pinText"></span><button class="btn primary" id="pinDone">Done</button></div>
 
 <section class="sheet" id="reportSheet" aria-label="Report a leak">
   <div class="stack">
@@ -98,7 +102,7 @@ textarea{width:100%;min-height:60px;border:1px solid var(--line);border-radius:1
       <label class="btn grow pickBtn">Take a photo<input type="file" class="photoInput" accept="image/*" capture="environment"></label>
       <label class="btn grow pickBtn">Choose from gallery<input type="file" class="photoInput" accept="image/*"></label>
     </div>
-    <div class="loc" id="locBox">Your location will be found after you take the photo.</div>
+    <div class="loc" id="locBox">Your location will be found after you add the photo.</div>
     <div>
       <p class="sub" style="margin-bottom:6px">How strong is it?</p>
       <div class="row" role="group" aria-label="Strength">
@@ -123,11 +127,11 @@ textarea{width:100%;min-height:60px;border:1px solid var(--line);border-radius:1
 <section class="sheet" id="aboutSheet" aria-label="About this map">
   <div class="stack aboutText">
     <h2>About Dilo Perdi</h2>
-    <p><b>Dilo perdi</b> means "lost water" in Mauritian Kreol. This is a volunteer project with no money behind it and no link to the CWA or the government.</p>
+    <p><b>Dilo perdi</b> (“lost water”) is a volunteer project with no money behind it and no link to the CWA or the government.</p>
     <p>Anyone can add a leak they see on a street or in a public place. Each report is checked by hand before it appears. The map shows how many days each leak has been there, so everyone can see what is still waiting for repair.</p>
-    <p><b>Your privacy.</b> We do not ask for your name, phone or email. Your photo is reduced in size and cleaned of hidden data before it is sent. Photos showing people or car plates are removed.</p>
+    <p><b>Your privacy.</b> We do not ask for your name, phone or email. Your photo is reduced in size before it is sent. Photos showing people or car plates are removed.</p>
     <p id="contactLine" hidden></p>
-    <p><b>To make an official complaint</b>, call the CWA on 170 or use the KOREK! app. The map does not send reports to the CWA.</p>
+    <p>The map does not send reports to the CWA.</p>
     <button class="btn" id="closeAbout">Close</button>
   </div>
 </section>
@@ -139,7 +143,7 @@ textarea{width:100%;min-height:60px;border:1px solid var(--line);border-radius:1
 <script>
 const SUPABASE_URL = "https://sdoxxefydlsaqzxdhjvy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_xyOYrIMR146NCu96GuWk6g_W4ocOPx3";
-const CONTACT_EMAIL = ""; // put a contact address here to show it on the About panel
+const CONTACT_EMAIL = "diloperdi@outlook.com"; // put a contact address here to show it on the About panel
 
 const BOUNDS = {latMin:-20.54, latMax:-19.95, lonMin:57.28, lonMax:57.82};
 const DAY = 86400000;
@@ -202,7 +206,7 @@ load();
 // Sheets
 const reportSheet=document.getElementById("reportSheet"), detailSheet=document.getElementById("detailSheet"), aboutSheet=document.getElementById("aboutSheet");
 const reportBtn=document.getElementById("reportBtn");
-function closeAll(){ [reportSheet,detailSheet,aboutSheet].forEach(s=>s.classList.remove("open","peek")); reportBtn.style.display=""; }
+function closeAll(){ [reportSheet,detailSheet,aboutSheet].forEach(s=>s.classList.remove("open","peek")); document.getElementById("pinBar").classList.remove("show"); reportBtn.style.display=""; }
 document.getElementById("aboutBtn").onclick=()=>{ closeAll(); aboutSheet.classList.add("open"); reportBtn.style.display="none"; };
 document.getElementById("closeAbout").onclick=closeAll;
 if(CONTACT_EMAIL){ const c=document.getElementById("contactLine"); c.hidden=false; c.innerHTML="<b>To remove a photo</b> or ask a question, write to "; const a=document.createElement("a"); a.href="mailto:"+CONTACT_EMAIL; a.textContent=CONTACT_EMAIL; c.appendChild(a); c.append("."); }
@@ -212,21 +216,35 @@ const draft={blob:null,lat:null,lon:null,sev:"flow"};
 let pin=null, tapMode=false;
 const locBox=document.getElementById("locBox");
 function refreshSend(){ document.getElementById("sendBtn").disabled=!(draft.blob&&draft.lat!=null); }
+const pinBar=document.getElementById("pinBar"), pinText=document.getElementById("pinText"), pinDone=document.getElementById("pinDone");
+function showMap(text,doneVisible){
+  reportSheet.classList.remove("open"); pinText.textContent=text; pinDone.textContent=doneVisible?"Done":"Back"; pinBar.classList.add("show");
+}
+function backToForm(){ pinBar.classList.remove("show"); tapMode=false; reportSheet.classList.add("open"); }
+pinDone.onclick=backToForm;
+function renderLocBox(msg){
+  locBox.hidden=false; locBox.innerHTML=""; const t=document.createElement("div"); t.textContent=msg; locBox.appendChild(t);
+  if(draft.lat!=null){ const b=document.createElement("button"); b.className="btn locBtn"; b.textContent="Check the pin on the map";
+    b.onclick=()=>{ map.setView([draft.lat,draft.lon],Math.max(map.getZoom(),17)); showMap("Drag the pin onto the leak, then tap Done.",true); };
+    locBox.appendChild(b); }
+}
 function setLoc(lat,lon,how){
-  if(!inBounds(lat,lon)){ locBox.textContent="That spot is outside Mauritius. Tap the map where the leak is."; tapMode=true; reportSheet.classList.add("peek"); return; }
+  if(!inBounds(lat,lon)){ askTap("That spot is outside Mauritius. Tap the map where the leak is."); return; }
   draft.lat=+lat.toFixed(6); draft.lon=+lon.toFixed(6);
-  if(!pin){ pin=L.marker([draft.lat,draft.lon],{draggable:true}).addTo(map); pin.on("dragend",()=>{const p=pin.getLatLng(); setLoc(p.lat,p.lng,"moved");}); }
+  if(!pin){ pin=L.marker([draft.lat,draft.lon],{draggable:true}).addTo(map); pin.on("dragend",()=>{const p=pin.getLatLng(); if(inBounds(p.lat,p.lng)){draft.lat=+p.lat.toFixed(6);draft.lon=+p.lng.toFixed(6);renderLocBox("Spot marked.");} }); }
   else pin.setLatLng([draft.lat,draft.lon]);
   map.setView([draft.lat,draft.lon],Math.max(map.getZoom(),17));
-  locBox.textContent= how==="gps" ? "Location found where you are now. If the leak is somewhere else, drag the pin to it." : "Spot marked. You can drag the pin to adjust it.";
-  tapMode=false; reportSheet.classList.remove("peek"); refreshSend();
+  tapMode=false;
+  if(how==="gps"){ locBox.hidden=true; }
+  else { renderLocBox("Spot marked."); showMap("Spot marked. Drag the pin to adjust it, then tap Done.",true); }
+  refreshSend();
 }
-function askTap(msg){ locBox.textContent=msg; tapMode=true; reportSheet.classList.add("peek"); }
+function askTap(msg){ renderLocBox(msg); tapMode=true; showMap(msg,false); }
 map.on("click",e=>{ if(tapMode) setLoc(e.latlng.lat,e.latlng.lng,"tap"); });
 
 function findLocation(){
   if(!navigator.geolocation){ askTap("Tap the map where the leak is."); return; }
-  locBox.textContent="Finding your location";
+  renderLocBox("Finding your location");
   navigator.geolocation.getCurrentPosition(
     p=>setLoc(p.coords.latitude,p.coords.longitude,"gps"),
     ()=>askTap("Location is off. Tap the map where the leak is."),
@@ -237,7 +255,7 @@ function resetDraft(){
   if(pin){ map.removeLayer(pin); pin=null; }
   document.getElementById("photoPick").innerHTML='<span id="photoHint">No photo yet</span>';
   document.querySelectorAll(".photoInput").forEach(i=>i.value="");
-  locBox.textContent="Your location will be found after you take the photo.";
+  renderLocBox("Your location will be found after you add the photo.");
   document.getElementById("noteInput").value="";
   document.querySelectorAll(".sev").forEach(b=>b.setAttribute("aria-pressed",b.dataset.sev==="flow"?"true":"false"));
   refreshSend();
