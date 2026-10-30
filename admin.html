@@ -21,6 +21,8 @@ label{font-size:.9rem;color:var(--muted)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .btn.good{background:var(--good);color:#fff;border-color:var(--good)}
 .btn.bad{color:var(--bad);border-color:var(--bad)}
+.sevBtn{padding:6px 12px;font-weight:400}
+.sevBtn[aria-pressed="true"]{border-color:var(--accent);font-weight:700;box-shadow:inset 0 0 0 1px var(--accent)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .tabs{display:flex;gap:8px}
 .tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -92,12 +94,20 @@ function render(){
     const c=document.createElement("article"); c.className="card";
     const photo=sb.storage.from("photos").getPublicUrl(r.photo_path).data.publicUrl;
     c.innerHTML=`<img alt="Reported photo" src="${photo}">
-      <p class="muted">${SEV[r.sev]||r.sev} · reported ${fmt(r.created_at)} · ${days(r.created_at)} days ago${r.confirms?` · ${r.confirms} confirmations`:""}</p>
+      <p class="muted">Reported ${fmt(r.created_at)} · ${days(r.created_at)} days ago${r.confirms?` · ${r.confirms} confirmations`:""}</p>
       <p class="note-text" style="margin:0"></p>
       <p class="muted"><a target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=${r.lat}&mlon=${r.lon}#map=18/${r.lat}/${r.lon}">See the spot on a map</a></p>
-      <div class="row"></div>`;
+      <div class="row sevRow" role="group" aria-label="Strength"><span class="muted">Strength:</span></div>
+      <div class="row actions"></div>`;
     c.querySelector(".note-text").textContent=r.note||"";
-    const row=c.querySelector(".row");
+    const sevRow=c.querySelector(".sevRow");
+    ["drip","flow","gush"].forEach(k=>{ const b=document.createElement("button"); b.className="btn sevBtn"; b.textContent=SEV[k];
+      b.setAttribute("aria-pressed",r.sev===k?"true":"false");
+      b.onclick=async()=>{ if(r.sev===k) return; b.disabled=true;
+        const {error}=await sb.from("reports").update({sev:k}).eq("id",r.id);
+        b.disabled=false; if(error){ alertBox("Could not save. Try again."); return; } r.sev=k; render(); };
+      sevRow.appendChild(b); });
+    const row=c.querySelector(".actions");
     const add=(label,cls,fn)=>{const b=document.createElement("button");b.className="btn "+cls;b.textContent=label;b.onclick=async()=>{b.disabled=true;await fn();};row.appendChild(b);};
     if(r.status==="pending"){ add("Approve","good",()=>setStatus(r,"approved")); add("Reject and delete","bad",()=>remove(r)); }
     if(r.status==="approved"){ add("Mark as fixed","good",()=>setStatus(r,"fixed")); add("Delete","bad",()=>remove(r)); }
